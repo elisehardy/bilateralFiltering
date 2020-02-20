@@ -1,0 +1,12 @@
+SET(CPUID_LIBRARIES ${CMAKE_SOURCE_DIR}/libs/libcpuid.so.14)
+IF (EXISTS "${CPUID_LIBRARIES}")
+    MESSAGE(STATUS "Found cpuid: ${CPUID_LIBRARIES}")
+ELSE ()
+    MESSAGE(FATAL_ERROR "cpuid not found: ${CPUID_LIBRARIES}")
+ENDIF ()
+
+SET(CPUID_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/libs/include/)
+IF (EXISTS ${CPUID_INCLUDE_DIRS})
+ELSE ()
+    MESSAGE(FATAL_ERROR "include for cpuid invalid or not found: ${CPUID_INCLUDE_DIRS}")
+ENDIF ()
