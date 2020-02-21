@@ -12,7 +12,7 @@ namespace bilateral {
             
             Bilateral() = delete;
             
-            static void naive(const Image8u1 &src, Image8u1 &dst, uint32_t diameter, float sColor, float sSpace);
+            static void naive(const Image8u1 &src, Image8u1 &dst, double sSpace, double sRange);
     };
 }
 

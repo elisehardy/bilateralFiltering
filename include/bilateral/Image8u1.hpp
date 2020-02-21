@@ -63,6 +63,7 @@ namespace bilateral {
             
             [[nodiscard]] uint32_t getSize() const;
             
+            
             //////////////////////////// OTHERS ////////////////////////////////////
             
             void save(const char *filename) const;
