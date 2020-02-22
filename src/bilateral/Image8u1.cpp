@@ -1,8 +1,10 @@
 #include <algorithm>
+#include <cassert>
 
 #include <lodepng/lodepng.hpp>
 
 #include <bilateral/Image8u1.hpp>
+
 
 
 namespace bilateral {
@@ -39,11 +41,22 @@ namespace bilateral {
     
     Image8u1::Image8u1(uint32_t width, uint32_t height, std::vector<uint8_t> pixels) :
             pixels(std::move(pixels)), height(height), width(width), size(height * width) {
+        if (this->pixels.size() != this->size) {
+            std::runtime_error("Error: The size of the given pixel array is not equal to width * height");
+        }
     }
     
     
     Image8u1::Image8u1(uint32_t width, uint32_t height, uint8_t *pixels) :
             pixels(pixels, pixels + width * height), height(height), width(width), size(height * width) {
+        if (this->pixels.size() != this->size) {
+            std::runtime_error("Error: The size of the given pixel array is not equal to width * height");
+        }
+    }
+    
+    
+    std::vector<uint8_t> Image8u1::getPixels() const {
+        return this->pixels;
     }
     
     
@@ -62,7 +75,7 @@ namespace bilateral {
     }
     
     
-    void Image8u1::save(const char *filename) const {
+    void Image8u1::save(const char *path) const {
         std::vector<uint8_t> raw(this->size * 4);
         
         for (uint32_t i = 0; i < this->size; i++) {
@@ -72,15 +85,17 @@ namespace bilateral {
             raw[i * 4 + 3] = 255;
         }
         
-        uint32_t error = lodepng::encode(filename, raw, this->width, this->height);
+        uint32_t error = lodepng::encode(path, raw, this->width, this->height);
         if (error) {
-            std::cerr << "Could not save image to '" << filename << "' : " << lodepng_error_text(error) << std::endl;
+            std::cerr << "Could not save image to '" << path << "' : " << lodepng_error_text(error) << std::endl;
             exit(EXIT_FAILURE);
         }
     }
     
     
     void Image8u1::borderedCopy(Image8u1 &dst, uint32_t size) const {
+        assert(size < width && size < height && "The size of the border cannot be greater than width or height");
+        
         uint32_t width = this->width + size + size;
         uint32_t height = this->height + size + size;
         uint32_t dstY, srcY;

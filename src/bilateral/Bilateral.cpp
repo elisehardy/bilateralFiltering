@@ -6,10 +6,19 @@
 
 namespace bilateral {
     
+    /**
+     * Compute a 2D gaussian kernel of diameter radius * 2 + 1.
+     *
+     * @param kernel Destination of the computed kernel.
+     * @param sigma Sigma used to compute the kernel.
+     * @param radius Radius of the kernel.
+     */
     static void gaussianKernel(std::vector<double> &kernel, double sigma, int32_t radius) {
         const double sigma2 = sigma * sigma;
         const double factor = 1. / (2. * M_PI * sigma2);
         const double divisor = 2. * sigma2;
+        
+        // Gaussian function with precomputed factor and divisor
         auto sGaussian = [factor, divisor](double value) {
             return factor * std::exp(-(value * value) / divisor);
         };
@@ -18,7 +27,10 @@ namespace bilateral {
         uint32_t index = 0;
         double sum = 0;
         
+        // Initialize the kernel size
         kernel.resize(static_cast<uint32_t >(diameter * diameter));
+        
+        // Fill the kernel with the gaussian value corresponding to the center of the kernel
         for (int32_t y = -radius; y <= radius; y++) {
             for (int32_t x = -radius; x <= radius; x++, index++) {
                 kernel[index] = sGaussian(std::sqrt(y * y + x * x));
@@ -45,7 +57,7 @@ namespace bilateral {
         
         std::vector<double> sKernel;
         gaussianKernel(sKernel, sSpace, radius);
-    
+        
         const double sigma2 = sRange * sRange;
         const double factor = 1. / (2. * M_PI * sigma2);
         const double divisor = 2. * sigma2;
