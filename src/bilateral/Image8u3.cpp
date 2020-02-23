@@ -1,96 +1,82 @@
 #include <algorithm>
-#include <cassert>
 
-#include <bilateral/Image8u1.hpp>
+#include <bilateral/Image8u3.hpp>
 #include <bilateral/lodepng.hpp>
 
 
 namespace bilateral {
     
-    Image8u1::Image8u1(const char *filename) {
+    Image8u3::Image8u3(const char *filename) {
         std::vector<uint8_t> raw;
-        
+    
         decodePNG(raw, this->width, this->height, filename);
         
         this->size = this->width * this->height;
         this->pixels.resize(this->size);
-        // lodepng loads in RGBA, we need to convert it in gray scale.
+        // lodepng loads in RGBA, we need to convert it in RGB.
         for (uint32_t i = 0; i < this->size; i++) {
-            this->pixels[i] = (raw[i * 4] + raw[i * 4 + 1] + raw[i * 4 + 2]) / 3;
+            this->pixels[i] = { raw[i * 4], raw[i * 4 + 1], raw[i * 4 + 2] };
         }
     }
     
     
-    Image8u1::Image8u1(const std::string &filename) :
-            Image8u1(filename.c_str()) {
+    Image8u3::Image8u3(const std::string &filename) :
+            Image8u3(filename.c_str()) {
     }
     
     
-    Image8u1::Image8u1(uint32_t width, uint32_t height) :
+    Image8u3::Image8u3(uint32_t width, uint32_t height) :
             height(height), width(width) {
         this->size = height * width;
         this->pixels.resize(height * width);
     }
     
     
-    Image8u1::Image8u1(uint32_t width, uint32_t height, std::vector<uint8_t> pixels) :
+    Image8u3::Image8u3(uint32_t width, uint32_t height, std::vector<Pixel> pixels) :
             pixels(std::move(pixels)), height(height), width(width), size(height * width) {
-        if (this->pixels.size() != this->size) {
-            std::runtime_error("Error: The size of the given pixel array is not equal to width * height");
-        }
     }
     
     
-    Image8u1::Image8u1(uint32_t width, uint32_t height, uint8_t *pixels) :
+    Image8u3::Image8u3(uint32_t width, uint32_t height, Pixel *pixels) :
             pixels(pixels, pixels + width * height), height(height), width(width), size(height * width) {
-        if (this->pixels.size() != this->size) {
-            std::runtime_error("Error: The size of the given pixel array is not equal to width * height");
-        }
     }
     
     
-    std::vector<uint8_t> Image8u1::getPixels() const {
-        return this->pixels;
-    }
-    
-    
-    uint32_t Image8u1::getWidth() const {
+    uint32_t Image8u3::getWidth() const {
         return this->width;
     }
     
     
-    uint32_t Image8u1::getHeight() const {
+    uint32_t Image8u3::getHeight() const {
         return this->height;
     }
     
     
-    uint32_t Image8u1::getSize() const {
+    uint32_t Image8u3::getSize() const {
         return this->size;
     }
     
     
-    void Image8u1::save(const char *path) const {
+    void Image8u3::save(const char *path) const {
         std::vector<uint8_t> raw(this->size * 4);
         
         for (uint32_t i = 0; i < this->size; i++) {
-            raw[i * 4] = this->pixels[i];
-            raw[i * 4 + 1] = this->pixels[i];
-            raw[i * 4 + 2] = this->pixels[i];
+            raw[i * 4] = this->pixels[i].r;
+            raw[i * 4 + 1] = this->pixels[i].g;
+            raw[i * 4 + 2] = this->pixels[i].b;
             raw[i * 4 + 3] = 255;
         }
-        
+    
         encodePNG(path, raw, this->width, this->height);
     }
     
     
-    void Image8u1::borderedCopy(Image8u1 &dst, uint32_t size) const {
-        assert(size < width && size < height && "The size of the border cannot be greater than width or height");
-        
+    void Image8u3::borderedCopy(Image8u3 &dst, uint32_t size) const {
         uint32_t width = this->width + size + size;
         uint32_t height = this->height + size + size;
         uint32_t dstY, srcY;
         
-        dst = Image8u1(width, height);
+        dst = Image8u3(width, height);
         
         // Center
         for (uint32_t y = 0; y < this->height; y++) {

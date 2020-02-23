@@ -90,6 +90,58 @@ namespace bilateral {
             }
         }
     }
+    
+    
+    void Bilateral::naive(const Image8u3 &src, Image8u3 &dst, double sSpace, double sRange) {
+        assert(sRange > 0 && "Color sigma must be greater than 0");
+        assert(sSpace > 0 && "Space sigma must be greater than 0");
+        
+        const int32_t radius = static_cast<const int32_t>(std::round(sSpace * 1.5));
+        const int32_t diameter = radius * 2 + 1;
+        Image8u3 bordered;
+        
+        src.borderedCopy(bordered, static_cast<uint32_t>(radius));
+        dst = Image8u3(src.getWidth(), src.getHeight());
+        
+        std::vector<double> sKernel;
+        gaussianKernel(sKernel, sSpace, radius);
+        
+        const double sigma2 = sRange * sRange;
+        const double factor = 1. / (2. * M_PI * sigma2);
+        const double divisor = 2. * sigma2;
+        auto rGaussian = [factor, divisor](double value) {
+            return factor * std::exp(-(value * value) / divisor);
+        };
+        
+        int32_t widthb = static_cast<int32_t>(bordered.getWidth());
+        int32_t width = static_cast<int32_t>(dst.getWidth());
+        int32_t height = static_cast<int32_t>(dst.getHeight());
+        uint32_t indexk, center, index;
+        glm::dvec3 sum, wp, kmul;
+        for (int32_t y = 0; y < height; y++) {
+            for (int32_t x = 0; x < width; x++) {
+                sum = glm::dvec3(0);
+                wp = glm::dvec3(0);
+                
+                center = static_cast<uint32_t>((y + radius) * widthb + x + radius);
+                for (int32_t ky = -radius; ky <= radius; ky++) {
+                    for (int32_t kx = -radius; kx <= radius; kx++) {
+                        indexk = static_cast<uint32_t>((ky + radius) * diameter + kx + radius);
+                        index = static_cast<uint32_t>((y + ky + radius) * widthb + x + kx + radius);
+                        kmul = glm::dvec3(
+                                rGaussian(std::abs(bordered[index].r - bordered[center].r)),
+                                rGaussian(std::abs(bordered[index].g - bordered[center].g)),
+                                rGaussian(std::abs(bordered[index].b - bordered[center].b))
+                        ) * sKernel[indexk];
+                        wp += kmul;
+                        sum += kmul * glm::dvec3(bordered[index]);
+                    }
+                }
+                
+                dst[y * width + x] = glm::dvec3(1 / wp.r, 1 / wp.g, 1 / wp.b) * sum;
+            }
+        }
+    }
 }
 
 

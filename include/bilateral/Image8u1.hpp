@@ -23,7 +23,7 @@ namespace bilateral {
             uint32_t size = 0;
         
         public:
-        
+            
             ////////////////////////////////////////////////////////////////////
             ///////////////////////// CONSTRUCTORS /////////////////////////////
             ////////////////////////////////////////////////////////////////////
@@ -60,7 +60,7 @@ namespace bilateral {
              *
              * The array of pixel size must be equal to width * height.
              *
-             * @param width Width if the image.
+             * @param width Width if the image.g
              * @param height Height of the image.
              * @param pixels Pixels composing the image.
              */
@@ -96,7 +96,8 @@ namespace bilateral {
                 static_assert(std::is_integral<T>::value, "Integral type required.");
                 return this->pixels[static_cast<uint32_t >(index)];
             }
-        
+            
+            
             /**
              * Return the valu of a pixel.
              *
@@ -111,6 +112,7 @@ namespace bilateral {
                 static_assert(std::is_integral<T>::value, "Integral type required.");
                 return this->pixels.at(static_cast<uint32_t >(index));
             }
+            
             
             /**
              * Return the vector of pixels composing the image.
@@ -139,7 +141,7 @@ namespace bilateral {
              * @return The size of the image.
              */
             [[nodiscard]] uint32_t getSize() const;
-        
+            
             
             ////////////////////////////////////////////////////////////////////
             //////////////////////////// OTHERS ////////////////////////////////
