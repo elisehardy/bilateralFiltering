@@ -50,7 +50,7 @@ namespace bilateral {
             /**
              * Initialize an empty image of size width * height.
              *
-             * @param width Width if the image.
+             * @param width Width of the image.
              * @param height Height of the image.
              */
             Image8u1(uint32_t width, uint32_t height);

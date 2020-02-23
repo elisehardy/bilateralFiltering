@@ -42,6 +42,11 @@ namespace bilateral {
     }
     
     
+    std::vector<Pixel> Image8u3::getPixels() const {
+        return this->pixels;
+    }
+    
+    
     uint32_t Image8u3::getWidth() const {
         return this->width;
     }
