@@ -2,7 +2,7 @@
 
 #include <bilateral/Bilateral.hpp>
 
-#define DEFAULT_RANGE_SIGMA 64.
+#define DEFAULT_RANGE_SIGMA 32.
 
 using namespace bilateral;
 
