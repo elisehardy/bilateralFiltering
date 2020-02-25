@@ -1,6 +1,7 @@
 #include <getopt.h>
 
-#include <bilateral/Bilateral.hpp>
+#include <bilateral/Image.hpp>
+
 
 #define DEFAULT_RANGE_SIGMA 32.
 
@@ -35,8 +36,8 @@ using namespace bilateral;
     std::cout << "\t -o" << std::endl;
     std::cout << "\t\t Path to the output image, default to 'output.png'" << std::endl << std::endl;
     
-    std::cout << "\t -g" << std::endl;
-    std::cout << "\t\t Read the image as a gray-scaled image, much faster than RGB." << std::endl << std::endl;
+    std::cout << "\t -c [CHANNEL]" << std::endl;
+    std::cout << "\t\t Read the image using CHANNEL number of channel (default to 3)" << std::endl << std::endl;
     
     std::cout << "\t -h" << std::endl;
     std::cout << "\t\t Displays this help" << std::endl << std::endl;
@@ -44,16 +45,38 @@ using namespace bilateral;
 }
 
 
+template<uint8_t N>
+void run(const std::string &input, double sSigma, double rSigma, int32_t iteration, const std::string &out) {
+    Image<N, uint8_t> src(input), dst;
+    
+    if (sSigma < 0) {
+        uint32_t width = src.getWidth();
+        uint32_t height = src.getHeight();
+        sSigma = std::sqrt(width * width + height * height) * 0.02;
+    }
+    if (rSigma < 0) {
+        rSigma = DEFAULT_RANGE_SIGMA;
+    }
+    
+    for (int32_t i = 0; i < iteration; i++) {
+        src.naive(dst, sSigma, rSigma);
+        src = dst;
+    }
+    
+    dst.save("output.png");
+}
+
+
 int main(int argc, char **argv) {
     char c;
-    bool gray = false;
+    int32_t channel = 3;
     double sSigma = -1;
     double rSigma = -1;
     int32_t iteration = 1;
     std::string input;
     std::string output = "output.png";
     
-    while ((c = static_cast<char>(getopt(argc, argv, "-s:-r:o:-i:gh"))) != -1) {
+    while ((c = static_cast<char>(getopt(argc, argv, "-s:-r:o:-i:c:h"))) != -1) {
         switch (c) {
             case 's':
                 try {
@@ -85,8 +108,14 @@ int main(int argc, char **argv) {
             case 'o':
                 output = optarg;
                 break;
-            case 'g':
-                gray = true;
+            case 'c':
+                try {
+                    channel = std::stoi(optarg);
+                } catch (std::invalid_argument const &) {
+                    std::cout << "Error: '" << optarg << "' is not a valid positive integer (see help with '-h')"
+                              << std::endl;
+                    exit(EXIT_FAILURE);
+                }
                 break;
             case 'h':
                 usageAndExit();
@@ -112,43 +141,19 @@ int main(int argc, char **argv) {
     }
     input = argv[optind - 1];
     
-    if (gray) {
-        Image8u1 src = Image8u1(input), dst;
-        
-        if (sSigma < 0) {
-            uint32_t width = src.getWidth();
-            uint32_t height = src.getHeight();
-            sSigma = std::sqrt(width * width + height * height) * 0.02;
-        }
-        if (rSigma < 0) {
-            rSigma = DEFAULT_RANGE_SIGMA;
-        }
-        
-        for (int32_t i = 0; i < iteration; i++) {
-            Bilateral::naive(src, dst, sSigma, rSigma);
-            src = dst;
-        }
-        
-        dst.save("output.png");
-    }
-    else {
-        Image8u3 src = Image8u3(input), dst;
-    
-        if (sSigma < 0) {
-            uint32_t width = src.getWidth();
-            uint32_t height = src.getHeight();
-            sSigma = std::sqrt(width * width + height * height) * 0.02;
-        }
-        if (rSigma < 0) {
-            rSigma = DEFAULT_RANGE_SIGMA;
-        }
-        
-        for (int32_t i = 0; i < iteration; i++) {
-            Bilateral::naive(src, dst, sSigma, rSigma);
-            src = dst;
-        }
-        
-        dst.save("output.png");
+    switch (channel) {
+        case 1:
+            run<1>(input, sSigma, rSigma, iteration, output);
+            break;
+        case 3:
+            run<3>(input, sSigma, rSigma, iteration, output);
+            break;
+        case 4:
+            run<4>(input, sSigma, rSigma, iteration, output);
+            break;
+        default:
+            std::cout << "Error: Channel must be 1, 3 or 4 (received '" << channel << "')" << std::endl;
+            exit(EXIT_FAILURE);
     }
     
     return 0;
