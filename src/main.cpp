@@ -120,11 +120,11 @@ int main(int argc, char **argv) {
             case 'h':
                 usageAndExit();
             case '?':
-                if (optopt == 's' || optopt == 'r' || optopt == 'i' || optopt == 'o') {
+                if (optopt == 's' || optopt == 'r' || optopt == 'i' || optopt == 'o' || optopt == 'c') {
                     std::cerr << "Option '-" << optopt << "' requires an argument (see help with '-h')" << std::endl;
                 }
                 else if (isprint(optopt)) {
-                    std::cerr << "Unknown option '-" << optopt << "' (see help with '-h')" << std::endl;
+                    std::cerr << "\t see help with '-h'" << std::endl;
                 }
                 else {
                     fprintf(stderr, "Unknown option character `\\x%x'.\n (see help with '-h')", optopt);
