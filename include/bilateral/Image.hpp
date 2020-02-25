@@ -15,6 +15,11 @@
 
 namespace bilateral {
     
+    enum {
+            NAIVE,
+            SEPARABLE_KERNEL
+    };
+    
     /**
      * Represents an Image with Pixel stored in a linear vector.
      *
@@ -170,7 +175,7 @@ namespace bilateral {
              * @param sigma Sigma used to compute the kernel.
              * @param radius Radius of the kernel.
              */
-            static void gaussianKernel1D(std::vector<double> &kernel, double sigma, int32_t radius);
+            static void gaussianKernel1D(std::vector<glm::vec<N, double>> &kernel, double sigma, int32_t radius);
             
             /**
              * Compute the gaussian(x) where x is the difference between p1 and p2.
@@ -196,6 +201,13 @@ namespace bilateral {
             void borderedCopy(Image<N, T> &dst, uint32_t size) const;
             
             /**
+             * Save the image to path as a PNG.
+             *
+             * @param path Path to the output image.
+             */
+            void save(const char *path) const;
+            
+            /**
             * Compute in dst the result of a bilateral filter on src using different sigma for the space and range factor.
             *
             * @param dst Destination of the result of the bilateral filter on src.
@@ -203,13 +215,14 @@ namespace bilateral {
             * @param sRange Sigma use for the range weight.
             */
             void naive(Image<N, T> &dst, double sSpace, double sRange);
-            
             /**
-             * Save the image to path as a PNG.
-             *
-             * @param path Path to the output image.
-             */
-            void save(const char *path) const;
+            * Compute in dst the result of a bilateral filter on src using different sigma for the space and range factor.
+            *
+            * @param dst Destination of the result of the bilateral filter on src.
+            * @param sSpace Sigma use for the space weight.
+            * @param sRange Sigma use for the range weight.
+            */
+            void separableKernel(Image<N, T> &dst, double sSpace, double sRange);
     };
     
     
@@ -306,7 +319,7 @@ namespace bilateral {
     
     
     template<int32_t N, typename T>
-    void Image<N, T>::gaussianKernel1D(std::vector<double> &kernel, double sigma, int32_t radius) {
+    void Image<N, T>::gaussianKernel1D(std::vector<glm::vec<N, double>> &kernel, double sigma, int32_t radius) {
         const double sigma2 = sigma * sigma;
         const double factor = 1. / (2. * M_PI * sigma2);
         const double divisor = 2. * sigma2;
@@ -318,18 +331,19 @@ namespace bilateral {
         
         const int32_t diameter = radius * 2 + 1;
         uint32_t index = 0;
-        double sum = 0;
+        glm::vec<N, double> sum = glm::vec<N, double>(0);
         
         // Initialize the kernel size
         kernel.resize(static_cast<uint32_t >(diameter));
         
-        // Fill the kernel with the gaussian value corresponding to the center of the kernel
-        for (int32_t y = -radius; y <= radius; y++) {
-            kernel[index] = sGaussian(std::abs(y));
-            sum += kernel[index];
+        
+        // Fill the kernel
+        for (int32_t y = -radius; y <= radius; y++, index++) {
+            kernel[index] = glm::vec<N, double>(sGaussian(std::abs(y)));
+            sum += glm::vec<N, double>(kernel[index]);
         }
         // Normalize the probability mass outside the kernel evenly to all pixels within the kernel
-        for (double &x : kernel) {
+        for (glm::vec<N, double> &x : kernel) {
             x /= sum;
         }
     }
@@ -353,7 +367,7 @@ namespace bilateral {
         // Initialize the kernel size
         kernel.resize(static_cast<uint32_t >(diameter * diameter));
         
-        // Fill the kernel with the gaussian value corresponding to the center of the kernel
+        // Fill the kernel
         for (int32_t y = -radius; y <= radius; y++) {
             for (int32_t x = -radius; x <= radius; x++, index++) {
                 kernel[index] = glm::vec<N, double>(sGaussian(std::sqrt(y * y + x * x)));
@@ -479,6 +493,79 @@ namespace bilateral {
                         wp += kmul;
                         sum += kmul * glm::vec<N, double>(bordered[index]);
                     }
+                }
+                
+                dst[y * width + x] = static_cast<Pixel>(1. / wp * sum);
+            }
+        }
+    }
+    
+    
+    template<int32_t N, typename T>
+    void Image<N, T>::separableKernel(Image<N, T> &dst, double sSpace, double sRange) {
+        assert(sRange > 0 && "Color sigma must be greater than 0");
+        assert(sSpace > 0 && "Space sigma must be greater than 0");
+        
+        const int32_t radius = static_cast<const int32_t>(std::round(sSpace * 1.5));
+        Image<N, T> bordered;
+        
+        this->borderedCopy(bordered, static_cast<uint32_t>(radius));
+        dst = Image(this->getWidth(), this->getHeight());
+        
+        std::vector<glm::vec<N, double>> sKernel;
+        gaussianKernel1D(sKernel, sSpace, radius);
+        
+        const double sigma2 = sRange * sRange;
+        const double factor = 1. / (2. * M_PI * sigma2);
+        const double divisor = 2. * sigma2;
+        std::function<double(double)> rGaussian = std::bind(
+                [](double factor, double divisor, double value) {
+                    return factor * std::exp(-(value * value) / divisor);
+                },
+                factor, divisor, std::placeholders::_1
+        );
+        
+        int32_t widthb = static_cast<int32_t>(bordered.getWidth());
+        int32_t width = static_cast<int32_t>(dst.getWidth());
+        int32_t height = static_cast<int32_t>(dst.getHeight());
+        uint32_t indexk, center, index;
+        glm::vec<N, double> sum, wp, kmul;
+        
+        // Apply on row
+        for (int32_t y = 0; y < height; y++) {
+            for (int32_t x = 0; x < width; x++) {
+                sum = glm::vec<N, double>(0);
+                wp = glm::vec<N, double>(0);
+                
+                center = static_cast<uint32_t>((y + radius) * widthb + x + radius);
+                for (int32_t kx = -radius; kx <= radius; kx++) {
+                    indexk = static_cast<uint32_t>(kx + radius);
+                    index = static_cast<uint32_t>((y + radius) * widthb + x + kx + radius);
+                    kmul = sKernel[indexk] * computeRangeGaussian(bordered[index], bordered[center], rGaussian);
+                    wp += kmul;
+                    sum += kmul * glm::vec<N, double>(bordered[index]);
+                }
+                
+                dst[y * width + x] = static_cast<Pixel>(1. / wp * sum);
+            }
+        }
+        
+        dst.borderedCopy(bordered, static_cast<uint32_t>(radius));
+        dst = Image(this->getWidth(), this->getHeight());
+        
+        // Apply on column
+        for (int32_t y = 0; y < height; y++) {
+            for (int32_t x = 0; x < width; x++) {
+                sum = glm::vec<N, double>(0);
+                wp = glm::vec<N, double>(0);
+                
+                center = static_cast<uint32_t>((y + radius) * widthb + x + radius);
+                for (int32_t ky = -radius; ky <= radius; ky++) {
+                    indexk = static_cast<uint32_t>(ky + radius);
+                    index = static_cast<uint32_t>((y + ky + radius) * widthb + x + radius);
+                    kmul = sKernel[indexk] * computeRangeGaussian(bordered[index], bordered[center], rGaussian);
+                    wp += kmul;
+                    sum += kmul * glm::vec<N, double>(bordered[index]);
                 }
                 
                 dst[y * width + x] = static_cast<Pixel>(1. / wp * sum);
