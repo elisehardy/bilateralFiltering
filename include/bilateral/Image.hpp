@@ -6,33 +6,34 @@
 #include <utility>
 #include <vector>
 #include <iostream>
+#include <functional>
 
 #include <glm/glm.hpp>
 
 #include <bilateral/lodepng.hpp>
-#include <functional>
 
 
 namespace bilateral {
     
     enum {
-            NAIVE,
-            SEPARABLE_KERNEL
+        NAIVE,
+        SEPARABLE_KERNEL,
+        BILATERAL_GRID
     };
+    
+    
     
     /**
      * Represents an Image with Pixel stored in a linear vector.
      *
      * @tparam N Number of channel per pixels.
-     * @tparam T Type used to represent a channel.
      */
-    template<int32_t N, typename T>
+    template<int32_t N>
     class Image {
             static_assert((N == 1 || N == 3 || N == 4) && "Number of channel must be 1, 3 or 4");
-            static_assert(std::is_arithmetic<T>::value, "Arithmetic type required.");
         
         public:
-            typedef glm::vec<N, T> Pixel;
+            typedef glm::vec<N, uint8_t> Pixel;
         
         private:
             std::vector<Pixel> pixels; /**< Pixels array. */
@@ -84,7 +85,7 @@ namespace bilateral {
              * @param height Height of the image.
              * @param pixels Pixels composing the image.
              */
-            Image(uint32_t width, uint32_t height, std::vector<T> pixels);
+            Image(uint32_t width, uint32_t height, const std::vector<uint8_t> &pixels);
             
             /**
              * Initialize an image of size width * height with the given pixels.
@@ -131,7 +132,7 @@ namespace bilateral {
              *
              * @return The vector of pixels composing the image.
              */
-            [[nodiscard]] std::vector<glm::vec<N, T>> getPixels() const;
+            [[nodiscard]] std::vector<uint8_t> getPixels() const;
             
             /**
              * Return the width of the image.
@@ -160,13 +161,22 @@ namespace bilateral {
             ////////////////////////////////////////////////////////////////////
             
             /**
-             * Compute a 2D gaussian kernel of diameter radius * 2 + 1.
+             * Create a copy of this image in dst, adding a border of size around the image.
              *
-             * @param kernel Destination of the computed kernel.
-             * @param sigma Sigma used to compute the kernel.
-             * @param radius Radius of the kernel.
+             * Border will be mirror reflection of the border elements (corresponding to BORDER_REFLECT on openCV).
+             * Border's size cannot be greater the width or height.
+             *
+             * @param dst Destination of the bordered copy.
+             * @param size Size of the border.
              */
-            static void gaussianKernel2D(std::vector<glm::vec<N, double>> &kernel, double sigma, int32_t radius);
+            void borderedCopy(Image<N> &dst, uint32_t size) const;
+            
+            /**
+             * Save the image to path as a PNG.
+             *
+             * @param path Path to the output image.
+             */
+            void save(const char *path) const;
             
             /**
              * Compute a 1D gaussian kernel of diameter radius * 2 + 1.
@@ -176,6 +186,26 @@ namespace bilateral {
              * @param radius Radius of the kernel.
              */
             static void gaussianKernel1D(std::vector<glm::vec<N, double>> &kernel, double sigma, int32_t radius);
+            
+            /**
+             * Compute a 2D gaussian kernel of diameter radius * 2 + 1.
+             *
+             * @param kernel Destination of the computed kernel.
+             * @param sigma Sigma used to compute the kernel.
+             * @param radius Radius of the kernel.
+             */
+            static void gaussianKernel2D(std::vector<glm::vec<N, double>> &kernel, double sigma, int32_t radius);
+            
+            /**
+             * Compute a 3D gaussian kernel of diameter radius * 2 + 1.
+             *
+             * @param kernel Destination of the computed kernel.
+             * @param sSpace Sigma used for the space weight.
+             * @param sRange Sigma used for the range weight.
+             * @param radius Radius of the kernel..
+             */
+            static void gaussianKernel3D(std::vector<glm::vec<N, double>> &kernel, double sSpace, double sRange,
+                                         int32_t radius);
             
             /**
              * Compute the gaussian(x) where x is the difference between p1 and p2.
@@ -190,39 +220,41 @@ namespace bilateral {
                                                             const std::function<double(double)> &gaussian);
             
             /**
-             * Create a copy of this image in dst, adding a border of size around the image.
+             * Compute in dst the result of a bilateral filter on src using different sigma for the space and range factor.
              *
-             * Border will be mirror reflection of the border elements (corresponding to BORDER_REFLECT on openCV).
-             * Border's size cannot be greater the width or height.
+             * Brute force implementation of the bilateral filter.
              *
-             * @param dst Destination of the bordered copy.
-             * @param size Size of the border.
+             * @param dst Destination of the result of the bilateral filter on src.
+             * @param sSpace Sigma used for the space weight.
+             * @param sRange Sigma used for the range weight.
              */
-            void borderedCopy(Image<N, T> &dst, uint32_t size) const;
+            void naive(Image<N> &dst, double sSpace, double sRange);
+            
             
             /**
-             * Save the image to path as a PNG.
+             * Compute in dst the result of a bilateral filter on src using different sigma for the space and range factor.
              *
-             * @param path Path to the output image.
+             * Faster implementation but introduce some inaccuracy.
+             *
+             * @param dst Destination of the result of the bilateral filter on src.
+             * @param sSpace Sigma used for the space weight.
+             * @param sRange Sigma used for the range weight.
              */
-            void save(const char *path) const;
+            void separableKernel(Image<N> &dst, double sSpace, double sRange);
             
             /**
-            * Compute in dst the result of a bilateral filter on src using different sigma for the space and range factor.
-            *
-            * @param dst Destination of the result of the bilateral filter on src.
-            * @param sSpace Sigma use for the space weight.
-            * @param sRange Sigma use for the range weight.
-            */
-            void naive(Image<N, T> &dst, double sSpace, double sRange);
-            /**
-            * Compute in dst the result of a bilateral filter on src using different sigma for the space and range factor.
-            *
-            * @param dst Destination of the result of the bilateral filter on src.
-            * @param sSpace Sigma use for the space weight.
-            * @param sRange Sigma use for the range weight.
-            */
-            void separableKernel(Image<N, T> &dst, double sSpace, double sRange);
+             * Compute in dst the result of a bilateral filter on src using different sigma for the space and range factor.
+             *
+             * Use a bilateral grid, as introduce by Jiawen Chen, Sylvain Paris, Frédo Durand in their paper,
+             * "Real-time Edge-Aware Image Processing with the Bilateral Grid".
+             *
+             * @param dst Destination of the result of the bilateral filter on src.
+             * @param sSpace Sigma used for the space weight.
+             * @param sRange Sigma used for the range weight.
+             * @param sampleSpace Sample rate used for the spatial axes.
+             * @param sampleRange Sample rate used for the range axis.
+             */
+            void bilateralGrid(Image<N> &dst, double sSpace, double sRange, double sampleSpace, double sampleRange);
     };
     
     
@@ -230,47 +262,41 @@ namespace bilateral {
     ////////////////////////////// TYPES ALIASES ///////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
     
-    using Image1u8 = Image<1, uint8_t>;
+    using Image1u8 = Image<1>;
     
-    using Image3u8 = Image<3, uint8_t>;
+    using Image3u8 = Image<3>;
     
-    using Image1f32 = Image<1, float>;
-    
-    using Image3f32 = Image<3, float>;
-    
-    using Image1f64 = Image<1, double>;
-    
-    using Image3f64 = Image<1, double>;
+    using Image4u8 = Image<4>;
     
     
     ////////////////////////////////////////////////////////////////////////////
     /////////////////////////// TEMPLATE DEFINITION ////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
     
-    template<int32_t N, typename T>
-    Image<N, T>::Image(const std::string &filename) :
+    template<int32_t N>
+    Image<N>::Image(const std::string &filename) :
             Image(filename.c_str()) {
     }
     
     
-    template<int32_t N, typename T>
-    Image<N, T>::Image(uint32_t width, uint32_t height) :
+    template<int32_t N>
+    Image<N>::Image(uint32_t width, uint32_t height) :
             height(height), width(width), size(height * width) {
         this->pixels.resize(this->size);
     }
     
     
-    template<int32_t N, typename T>
-    Image<N, T>::Image(uint32_t width, uint32_t height, std::vector<T> pixels) :
-            pixels(std::move(pixels)), height(height), width(width), size(height * width) {
+    template<int32_t N>
+    Image<N>::Image(uint32_t width, uint32_t height, const std::vector<uint8_t> &pixels) :
+            pixels(pixels), height(height), width(width), size(height * width) {
         if (this->pixels.size() != this->size) {
             std::runtime_error("Error: The size of the given pixel array is not equal to width * height");
         }
     }
     
     
-    template<int32_t N, typename T>
-    Image<N, T>::Image(uint32_t width, uint32_t height, const uint8_t *pixels) :
+    template<int32_t N>
+    Image<N>::Image(uint32_t width, uint32_t height, const uint8_t *pixels) :
             pixels(pixels, pixels + width * height), height(height), width(width), size(height * width) {
         if (this->pixels.size() != this->size) {
             std::runtime_error("Error: The size of the given pixel array is not equal to width * height");
@@ -278,48 +304,68 @@ namespace bilateral {
     }
     
     
-    template<int32_t N, typename T>
+    template<int32_t N>
     template<typename U>
-    auto Image<N, T>::operator[](U index) -> Image<N, T>::Pixel & {
+    auto Image<N>::operator[](U index) -> Image<N>::Pixel & {
         static_assert(std::is_integral<U>::value, "Integral type required.");
         return this->pixels[static_cast<uint32_t >(index)];
     }
     
     
-    template<int32_t N, typename T>
+    template<int32_t N>
     template<typename U>
-    auto Image<N, T>::at(U index) const -> Image<N, T>::Pixel {
+    auto Image<N>::at(U index) const -> Image<N>::Pixel {
         static_assert(std::is_integral<U>::value, "Integral type required.");
         return this->pixels.at(static_cast<uint32_t >(index));
     }
     
     
-    template<int32_t N, typename T>
-    std::vector<glm::vec<N, T>> Image<N, T>::getPixels() const {
+    template<int32_t N>
+    std::vector<uint8_t> Image<N>::getPixels() const {
         return this->pixels;
     }
     
     
-    template<int32_t N, typename T>
-    uint32_t Image<N, T>::getWidth() const {
+    template<int32_t N>
+    uint32_t Image<N>::getWidth() const {
         return this->width;
     }
     
     
-    template<int32_t N, typename T>
-    uint32_t Image<N, T>::getHeight() const {
+    template<int32_t N>
+    uint32_t Image<N>::getHeight() const {
         return this->height;
     }
     
     
-    template<int32_t N, typename T>
-    uint32_t Image<N, T>::getSize() const {
+    template<int32_t N>
+    uint32_t Image<N>::getSize() const {
         return this->size;
     }
     
     
-    template<int32_t N, typename T>
-    void Image<N, T>::gaussianKernel1D(std::vector<glm::vec<N, double>> &kernel, double sigma, int32_t radius) {
+    template<int32_t N>
+    void Image<N>::borderedCopy(Image<N> &dst, uint32_t size) const {
+        assert(size < width && size < height && "The size of the border cannot be greater than width or height");
+        
+        uint32_t width = this->width + size + size;
+        uint32_t height = this->height + size + size;
+        dst = Image<N>(width, height);
+        uint32_t dstY, srcY;
+        
+        for (uint32_t y = 0; y < this->height; y++) {
+            dstY = (y + size) * width;
+            srcY = y * this->width;
+            for (uint32_t x = 0; x < this->width; x++) {
+                dst[dstY + x + size] = this->pixels[srcY + x];
+            }
+        }
+    }
+    
+    //////////////////////////// GAUSSIAN KERNEL ///////////////////////////////
+    
+    template<int32_t N>
+    void Image<N>::gaussianKernel1D(std::vector<glm::vec<N, double>> &kernel, double sigma, int32_t radius) {
         const double sigma2 = sigma * sigma;
         const double factor = 1. / (2. * M_PI * sigma2);
         const double divisor = 2. * sigma2;
@@ -349,8 +395,8 @@ namespace bilateral {
     }
     
     
-    template<int32_t N, typename T>
-    void Image<N, T>::gaussianKernel2D(std::vector<glm::vec<N, double>> &kernel, double sigma, int32_t radius) {
+    template<int32_t N>
+    void Image<N>::gaussianKernel2D(std::vector<glm::vec<N, double>> &kernel, double sigma, int32_t radius) {
         const double sigma2 = sigma * sigma;
         const double factor = 1. / (2. * M_PI * sigma2);
         const double divisor = 2. * sigma2;
@@ -381,9 +427,45 @@ namespace bilateral {
     }
     
     
-    template<int32_t N, typename T>
-    glm::vec<N, double> Image<N, T>::computeRangeGaussian(const Pixel &p1, const Pixel &p2,
-                                                          const std::function<double(double)> &gaussian) {
+    template<int32_t N>
+    void Image<N>::gaussianKernel3D(std::vector<glm::vec<N, double>> &kernel, double sSpace, double sRange,
+                                    int32_t radius) {
+        const double sSigma2 = sSpace * sSpace;
+        const double rDivisor = 2. * sRange * sRange;
+        const double sDivisor = 2. * sSigma2;
+        const double factor = 1. / (2. * M_PI * sSigma2 * sRange);
+        
+        const auto gaussian = [factor, sDivisor, rDivisor](double space, double range) {
+            return factor * std::exp(-((space * space) / sDivisor + range / rDivisor));
+        };
+        
+        const int32_t diameter = radius * 2 + 1;
+        glm::vec<N, double> sum = glm::vec<N, double>(0);
+        uint32_t index = 0;
+        
+        // Initialize the kernel size
+        kernel.resize(static_cast<uint32_t >(diameter * diameter * diameter));
+        
+        // Fill the kernel
+        for (int32_t z = -radius; z <= radius; z++) {
+            for (int32_t y = -radius; y <= radius; y++) {
+                for (int32_t x = -radius; x <= radius; x++, index++) {
+                    kernel[index] = glm::vec<N, double>(gaussian(std::sqrt(y * y + x * x)), std::abs(z));
+                    sum += glm::vec<N, double>(kernel[index]);
+                }
+            }
+        }
+        
+        // Normalize the probability mass outside the kernel evenly to all pixels within the kernel
+        for (glm::vec<N, double> &x : kernel) {
+            x /= sum;
+        }
+    }
+    
+    
+    template<int32_t N>
+    glm::vec<N, double> Image<N>::computeRangeGaussian(const Pixel &p1, const Pixel &p2,
+                                                       const std::function<double(double)> &gaussian) {
         glm::vec<N, double> g;
         
         for (int32_t i = 0; i < N; i++) {
@@ -393,70 +475,16 @@ namespace bilateral {
         return g;
     }
     
+    ///////////////////////////////// NAIVE ////////////////////////////////////
     
-    template<int32_t N, typename T>
-    void Image<N, T>::borderedCopy(Image<N, T> &dst, uint32_t size) const {
-        assert(size < width && size < height && "The size of the border cannot be greater than width or height");
-        
-        uint32_t width = this->width + size + size;
-        uint32_t height = this->height + size + size;
-        uint32_t dstY, srcY;
-        
-        dst = Image<N, T>(width, height);
-        
-        // Center
-        for (uint32_t y = 0; y < this->height; y++) {
-            dstY = (y + size) * width;
-            srcY = y * this->width;
-            for (uint32_t x = 0; x < this->width; x++) {
-                dst[dstY + x + size] = this->pixels[srcY + x];
-            }
-        }
-        
-        // Top border
-        for (uint32_t y = 0; y < size; y++) {
-            dstY = y * width;
-            srcY = (size - y) * this->width;
-            for (uint32_t x = size; x < this->width + size; x++) {
-                dst[dstY + x] = this->pixels[srcY + x - size];
-            }
-        }
-        
-        // Bottom border
-        for (uint32_t y = this->height + size, tmp = 0; y < height; y++, tmp++) {
-            dstY = y * width;
-            srcY = (this->height - tmp - 1) * this->width;
-            for (uint32_t x = size; x < this->width + size; x++) {
-                dst[dstY + x] = this->pixels[srcY + x - size];
-            }
-        }
-        
-        // Left border
-        for (uint32_t y = 0; y < height; y++) {
-            dstY = y * width;
-            for (uint32_t x = 0, tmp = 0; x < size; x++, tmp++) {
-                dst[dstY + x] = dst[dstY + size + size - tmp];
-            }
-        }
-        
-        // Right border
-        for (uint32_t y = 0; y < height; y++) {
-            dstY = y * width;
-            for (uint32_t x = this->width + size, tmp = 0; x < width; x++, tmp++) {
-                dst[dstY + x] = dst[dstY + this->width + size - tmp - 1];
-            }
-        }
-    }
-    
-    
-    template<int32_t N, typename T>
-    void Image<N, T>::naive(Image<N, T> &dst, double sSpace, double sRange) {
+    template<int32_t N>
+    void Image<N>::naive(Image<N> &dst, double sSpace, double sRange) {
         assert(sRange > 0 && "Color sigma must be greater than 0");
         assert(sSpace > 0 && "Space sigma must be greater than 0");
         
         const int32_t radius = static_cast<const int32_t>(std::round(sSpace * 1.5));
         const int32_t diameter = radius * 2 + 1;
-        Image<N, T> bordered;
+        Image<N> bordered;
         
         this->borderedCopy(bordered, static_cast<uint32_t>(radius));
         dst = Image(this->getWidth(), this->getHeight());
@@ -477,8 +505,9 @@ namespace bilateral {
         int32_t widthb = static_cast<int32_t>(bordered.getWidth());
         int32_t width = static_cast<int32_t>(dst.getWidth());
         int32_t height = static_cast<int32_t>(dst.getHeight());
-        uint32_t indexk, center, index;
         glm::vec<N, double> sum, wp, kmul;
+        uint32_t indexk, center, index;
+        
         for (int32_t y = 0; y < height; y++) {
             for (int32_t x = 0; x < width; x++) {
                 sum = glm::vec<N, double>(0);
@@ -501,13 +530,17 @@ namespace bilateral {
     }
     
     
-    template<int32_t N, typename T>
-    void Image<N, T>::separableKernel(Image<N, T> &dst, double sSpace, double sRange) {
+    
+    /////////////////////////// SEPARABLE KERNEL ///////////////////////////////
+    
+    
+    template<int32_t N>
+    void Image<N>::separableKernel(Image<N> &dst, double sSpace, double sRange) {
         assert(sRange > 0 && "Color sigma must be greater than 0");
         assert(sSpace > 0 && "Space sigma must be greater than 0");
         
         const int32_t radius = static_cast<const int32_t>(std::round(sSpace * 1.5));
-        Image<N, T> bordered;
+        Image<N> bordered;
         
         this->borderedCopy(bordered, static_cast<uint32_t>(radius));
         dst = Image(this->getWidth(), this->getHeight());
@@ -528,8 +561,8 @@ namespace bilateral {
         int32_t widthb = static_cast<int32_t>(bordered.getWidth());
         int32_t width = static_cast<int32_t>(dst.getWidth());
         int32_t height = static_cast<int32_t>(dst.getHeight());
-        uint32_t indexk, center, index;
         glm::vec<N, double> sum, wp, kmul;
+        uint32_t indexk, center, index;
         
         // Apply on row
         for (int32_t y = 0; y < height; y++) {
@@ -573,13 +606,72 @@ namespace bilateral {
         }
     }
     
+    //////////////////////////// BILATERAL GRID ////////////////////////////////
+    
+    template<int32_t N>
+    static void borderedGridCopy(const std::vector<glm::vec<N + 1, double>> &src,
+                                 std::vector<glm::vec<N + 1, double>> &dst, uint32_t xSize, uint32_t ySize,
+                                 uint32_t zSize, uint32_t borderSize) {
+        uint32_t width = xSize + borderSize + borderSize;
+        uint32_t height = ySize + borderSize + borderSize;
+        uint32_t depth = zSize + borderSize + borderSize;
+        uint32_t dstY, srcY, dstZ, srcZ;
+        
+        dst.resize(width * height * depth);
+        
+        for (uint32_t z = 0; z < zSize; z++) {
+            dstZ = (z + borderSize) * zSize;
+            srcZ = z * zSize;
+            
+            for (uint32_t y = 0; y < ySize; y++) {
+                dstY = (y + borderSize + dstZ) * ySize;
+                srcY = (y + srcZ) * ySize;
+                
+                for (uint32_t x = 0; x < xSize; x++) {
+                    dst[dstY + x + borderSize] = src[srcY + x];
+                }
+            }
+        }
+    }
+    
+    
+    template<int32_t N>
+    void Image<N>::bilateralGrid(Image<N> &dst, double sSpace, double sRange, double sampleSpace,
+                                 double sampleRange) {
+        assert(sSpace > 0 && "Space sigma must be greater than 0");
+        assert(sRange > 0 && "Color sigma must be greater than 0");
+        assert(sampleSpace > 0 && "Sample space must be greater than 0");
+        assert(sampleRange > 0 && "Sample range must be greater than 0");
+        
+        auto grid = std::vector<glm::vec<N + 1, double>>(this->width * this->height * 255);
+        uint32_t i, iGrid;
+        
+        for (uint32_t y = 0; y < this->height; y++) {
+            for (uint32_t x = 0; x < this->width; x++) {
+                i = x + y * this->width;
+                iGrid = x + this->width * (y + 255 * this->pixels[i].x);
+                
+                grid[iGrid] = std::vector<glm::vec<N + 1, uint8_t>>(this->pixels[i], 1);
+            }
+        }
+        
+        const int32_t radius = static_cast<const int32_t>(std::round(sSpace * 1.5));
+        
+        Image<N> bordered;
+        this->borderedGridCopy(grid, bordered, this->width, this->height, 255, radius);
+        
+        std::vector<glm::vec<N + 1, double>> sKernel;
+        gaussianKernel3D(sKernel, sSpace, sRange, radius);
+    }
+    
+    
     
     ////////////////////////////////////////////////////////////////////////////
     ///////////////////////// TEMPLATE SPECIALIZATION //////////////////////////
     ////////////////////////////////////////////////////////////////////////////
     
     template<>
-    Image<1, uint8_t>::Image(const char *filename) {
+    Image<1>::Image(const char *filename) {
         std::vector<uint8_t> raw;
         
         decodePNG(raw, this->width, this->height, filename);
@@ -594,7 +686,7 @@ namespace bilateral {
     
     
     template<>
-    void Image<1, uint8_t>::save(const char *path) const {
+    void Image<1>::save(const char *path) const {
         std::vector<uint8_t> raw(this->size * 4);
         
         for (uint32_t i = 0; i < this->size; i++) {
@@ -609,7 +701,7 @@ namespace bilateral {
     
     
     template<>
-    Image<3, uint8_t>::Image(const char *filename) {
+    Image<3>::Image(const char *filename) {
         std::vector<uint8_t> raw;
         
         decodePNG(raw, this->width, this->height, filename);
@@ -626,7 +718,7 @@ namespace bilateral {
     
     
     template<>
-    void Image<3, uint8_t>::save(const char *path) const {
+    void Image<3>::save(const char *path) const {
         std::vector<uint8_t> raw(this->size * 4);
         
         for (uint32_t i = 0; i < this->size; i++) {
@@ -641,7 +733,7 @@ namespace bilateral {
     
     
     template<>
-    Image<4, uint8_t>::Image(const char *filename) {
+    Image<4>::Image(const char *filename) {
         std::vector<uint8_t> raw;
         
         decodePNG(raw, this->width, this->height, filename);
@@ -659,7 +751,7 @@ namespace bilateral {
     
     
     template<>
-    void Image<4, uint8_t>::save(const char *path) const {
+    void Image<4>::save(const char *path) const {
         std::vector<uint8_t> raw(this->size * 4);
         
         for (uint32_t i = 0; i < this->size; i++) {

@@ -54,7 +54,7 @@ using namespace bilateral;
 template<uint8_t N>
 void run(const std::string &input, double sSigma, double rSigma, int32_t iteration, const std::string &out,
          int32_t algorithm) {
-    Image<N, uint8_t> src(input), dst;
+    Image<N> src(input), dst;
     
     if (sSigma < 0) {
         uint32_t width = src.getWidth();

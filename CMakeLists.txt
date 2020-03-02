@@ -8,15 +8,18 @@ SET(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/CMake)
 ############################## 3RD PARTIES LIBS ################################
 
 FIND_PACKAGE(cpuid REQUIRED)
+FIND_PACKAGE(OpenCV REQUIRED)
 
 INCLUDE_DIRECTORIES(
     SYSTEM
     ${CPUID_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIR}
     ${LIBS_INCLUDE_DIR}
 )
 
 LINK_LIBRARIES(
     ${CPUID_LIBRARIES}
+    ${OpenCV_LIBS}
 )
 
 
