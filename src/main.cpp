@@ -1,6 +1,9 @@
 #include <getopt.h>
 
 #include <bilateral/Image.hpp>
+#include <opencv2/opencv.hpp>
+#include <opencv2/imgproc.hpp>
+#include "opencv2/imgcodecs.hpp"
 
 
 #define DEFAULT_RANGE_SIGMA 32.
@@ -34,6 +37,7 @@ using namespace bilateral;
     std::cout << "\t\t ID of the algorithm to use : "
               << "naive (" << NAIVE << "), "
               << "separable kernel (" << SEPARABLE_KERNEL << ") "
+              << "opencv (" << OPENCV << ") "
               << ". Default to naive." << std::endl << std::endl;
     
     std::cout << "\t -i ITERATION" << std::endl;
@@ -73,6 +77,14 @@ void run(const std::string &input, double sSigma, double rSigma, int32_t iterati
             case SEPARABLE_KERNEL:
                 src.separableKernel(dst, sSigma, rSigma);
                 break;
+            case OPENCV: {
+                cv::Mat dst2;
+                cv::bilateralFilter(cv::imread(input, 1),
+                                    dst2, 5, sSigma, rSigma, cv::BORDER_DEFAULT);
+                cv::imwrite( "bilateral_filter.png", dst2);
+
+                break;
+            }
             default:
                 std::cerr << "Error: Unknown algorithm '" << algorithm << "', see help with '-h'" << std::endl;
                 exit(EXIT_FAILURE);

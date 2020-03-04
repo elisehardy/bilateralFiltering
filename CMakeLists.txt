@@ -8,15 +8,18 @@ SET(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/CMake)
 ############################## 3RD PARTIES LIBS ################################
 
 FIND_PACKAGE(cpuid REQUIRED)
+find_package( OpenCV HINTS "~/Software/OpenCVLibs/opencv-3.1.0/release/share/OpenCV/" )
 
 INCLUDE_DIRECTORIES(
     SYSTEM
     ${CPUID_INCLUDE_DIRS}
     ${LIBS_INCLUDE_DIR}
+    ${OpenCV_INCLUDE_DIRS}
 )
 
 LINK_LIBRARIES(
     ${CPUID_LIBRARIES}
+    ${OpenCV_LIBS}
 )
 
 

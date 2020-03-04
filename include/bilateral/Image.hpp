@@ -17,7 +17,8 @@ namespace bilateral {
     
     enum {
             NAIVE,
-            SEPARABLE_KERNEL
+            SEPARABLE_KERNEL,
+            OPENCV
     };
     
     /**
